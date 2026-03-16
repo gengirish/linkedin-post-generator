@@ -1,0 +1,13 @@
+# linkedin-post-generator — IntelliForge AI
+# Share Your Training Experience → LinkedIn Post
+# Built by BuildwithAiGiri x IntelliForge AI — https://www.intelliforge.tech/
+
+Stack: Next.js 14 App Router / TypeScript / Tailwind / better-sqlite3 / OpenRouter
+Colors: #7c3aed (purple-primary) | #00d4ff (cyan-accent) | #030014 (dark-bg)
+Admin: /admin — share analytics (no auth in MVP)
+API: POST /api/generate — AI post gen | POST+GET /api/shares — tracking
+
+Branding rules:
+- Always link to https://learning.intelliforge.tech in generated posts
+- Always mention "IntelliForge AI" in post copy
+- Footer must credit IntelliForge AI + BuildwithAiGiri
