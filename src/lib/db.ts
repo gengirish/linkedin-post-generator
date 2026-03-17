@@ -1,17 +1,8 @@
 /**
- * SQLite share tracking via better-sqlite3.
- * Used by /api/shares route to persist and query share events.
- *
- * DB_PATH defaults to shares.db in the project root.
- * Override via the DB_PATH environment variable (e.g. for a persistent volume on Vercel / Railway).
- *
- * Note: better-sqlite3 is synchronous by design and performs well for this low-traffic use-case.
+ * In-memory share tracking for Vercel serverless.
+ * Note: resets on cold start — upgrade to Vercel KV / PlanetScale for persistence.
+ * Built by IntelliForge AI — https://www.intelliforge.tech/
  */
-import Database from "better-sqlite3";
-import path from "path";
-
-export const DB_PATH =
-  process.env.DB_PATH || path.join(process.cwd(), "shares.db");
 
 export interface ShareRow {
   id: number;
@@ -32,67 +23,39 @@ export interface ShareStats {
   recent: Omit<ShareRow, "id">[];
 }
 
-/**
- * Open (or create) the SQLite database and ensure the shares table exists.
- * Caller is responsible for calling db.close() when done.
- */
-export function getDb(): Database.Database {
-  const db = new Database(DB_PATH);
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS shares (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      name       TEXT,
-      course     TEXT    NOT NULL,
-      post_index INTEGER NOT NULL,
-      created_at TEXT    NOT NULL DEFAULT (datetime('now'))
-    )
-  `);
-  return db;
-}
+// In-memory store (persists within the same serverless instance)
+const shares: ShareRow[] = [];
+let nextId = 1;
 
 /** Insert a share event and return the new row id. */
-export function logShare(
-  name: string,
-  course: string,
-  postIndex: number
-): number {
-  const db = getDb();
-  try {
-    const result = db
-      .prepare(
-        "INSERT INTO shares (name, course, post_index) VALUES (?, ?, ?)"
-      )
-      .run(name || "Anonymous", course, postIndex);
-    return result.lastInsertRowid as number;
-  } finally {
-    db.close();
-  }
+export function logShare(name: string, course: string, postIndex: number): number {
+  const row: ShareRow = {
+    id: nextId++,
+    name: name || "Anonymous",
+    course,
+    post_index: postIndex,
+    created_at: new Date().toISOString(),
+  };
+  shares.push(row);
+  return row.id;
 }
 
 /** Return aggregated share statistics. */
 export function getShareStats(): ShareStats {
-  const db = getDb();
-  try {
-    const total = (
-      db.prepare("SELECT COUNT(*) as count FROM shares").get() as {
-        count: number;
-      }
-    ).count;
+  const total = shares.length;
 
-    const byCourse = db
-      .prepare(
-        "SELECT course, COUNT(*) as count FROM shares GROUP BY course ORDER BY count DESC"
-      )
-      .all() as CourseCount[];
-
-    const recent = db
-      .prepare(
-        "SELECT name, course, post_index, created_at FROM shares ORDER BY created_at DESC LIMIT 10"
-      )
-      .all() as Omit<ShareRow, "id">[];
-
-    return { total, byCourse, recent };
-  } finally {
-    db.close();
+  const courseMap = new Map<string, number>();
+  for (const s of shares) {
+    courseMap.set(s.course, (courseMap.get(s.course) || 0) + 1);
   }
+  const byCourse: CourseCount[] = Array.from(courseMap.entries())
+    .map(([course, count]) => ({ course, count }))
+    .sort((a, b) => b.count - a.count);
+
+  const recent = shares
+    .slice(-10)
+    .reverse()
+    .map(({ id: _id, ...rest }) => rest);
+
+  return { total, byCourse, recent };
 }
