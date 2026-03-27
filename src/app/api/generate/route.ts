@@ -29,43 +29,58 @@ Rules:
 }
 
 export async function POST(req: NextRequest) {
-  const data = await req.json();
+  try {
+    const data = await req.json();
 
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) {
-    // Fallback: return template posts
-    const fallback = [
-      `🎯 Just completed "${data.course}" with IntelliForge AI!\n\n${data.name} here — thrilled to share this milestone.\n\n${data.takeaway}\n\n${data.beforeAfter || ""}\n\nIf you're looking to level up your AI skills, check out IntelliForge AI: https://learning.intelliforge.tech\n\n#AI #MachineLearning #LearningAndDevelopment #IntelliForgeAI #AITraining`,
-      `💡 3 things I learned from "${data.course}" (IntelliForge AI):\n\n1. ${data.takeaway}\n2. AI isn't just for engineers — it's for everyone\n3. The best time to upskill in AI was yesterday. Second best: now.\n\n${data.beforeAfter || ""}\n\nLink in bio to register: https://learning.intelliforge.tech\n\n#AI #Upskilling #AITraining #IntelliForgeAI #FutureOfWork`,
-      `🚀 Want to learn AI properly? I just finished "${data.course}" with IntelliForge AI — here's why I recommend it:\n\n${data.takeaway}\n\nGirish Hiremath and the IntelliForge team make complex AI concepts genuinely practical.\n\nRegister at: https://learning.intelliforge.tech\n\n#AI #AIEducation #IntelliForgeAI #Recommend #MachineLearning`,
-    ];
-    return NextResponse.json({ posts: fallback });
+    const apiKey = process.env.OPENROUTER_API_KEY?.trim();
+    if (!apiKey) {
+      const fallback = [
+        `🎯 Just completed "${data.course}" with IntelliForge AI!\n\n${data.name} here — thrilled to share this milestone.\n\n${data.takeaway}\n\n${data.beforeAfter || ""}\n\nIf you're looking to level up your AI skills, check out IntelliForge AI: https://learning.intelliforge.tech\n\n#AI #MachineLearning #LearningAndDevelopment #IntelliForgeAI #AITraining`,
+        `💡 3 things I learned from "${data.course}" (IntelliForge AI):\n\n1. ${data.takeaway}\n2. AI isn't just for engineers — it's for everyone\n3. The best time to upskill in AI was yesterday. Second best: now.\n\n${data.beforeAfter || ""}\n\nLink in bio to register: https://learning.intelliforge.tech\n\n#AI #Upskilling #AITraining #IntelliForgeAI #FutureOfWork`,
+        `🚀 Want to learn AI properly? I just finished "${data.course}" with IntelliForge AI — here's why I recommend it:\n\n${data.takeaway}\n\n${data.name} and the IntelliForge team make complex AI concepts genuinely practical.\n\nRegister at: https://learning.intelliforge.tech\n\n#AI #AIEducation #IntelliForgeAI #Recommend #MachineLearning`,
+      ];
+      return NextResponse.json({ posts: fallback });
+    }
+
+    const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+        "X-Title": "IntelliForge LinkedIn Post Generator",
+      },
+      body: JSON.stringify({
+        model: "meta-llama/llama-3.3-70b-instruct",
+        messages: [
+          { role: "system", content: SYSTEM },
+          { role: "user", content: buildPrompt(data) },
+        ],
+        max_tokens: 1200,
+        temperature: 0.8,
+      }),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text();
+      console.error("OpenRouter API error:", resp.status, errText);
+      return NextResponse.json(
+        { error: `AI service returned ${resp.status}` },
+        { status: 502 }
+      );
+    }
+
+    const json = await resp.json();
+    const raw = json.choices?.[0]?.message?.content ?? "";
+    const posts = raw.split("---POST---").map((p: string) => p.trim()).filter(Boolean).slice(0, 3);
+
+    while (posts.length < 3) posts.push(posts[0] || "Error generating post.");
+
+    return NextResponse.json({ posts });
+  } catch (err: any) {
+    console.error("Generate API error:", err);
+    return NextResponse.json(
+      { error: err.message || "Internal server error" },
+      { status: 500 }
+    );
   }
-
-  const resp = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "X-Title": "IntelliForge LinkedIn Post Generator",
-    },
-    body: JSON.stringify({
-      model: "meta-llama/llama-3.3-70b-instruct",
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: buildPrompt(data) },
-      ],
-      max_tokens: 1200,
-      temperature: 0.8,
-    }),
-  });
-
-  const json = await resp.json();
-  const raw = json.choices?.[0]?.message?.content ?? "";
-  const posts = raw.split("---POST---").map((p: string) => p.trim()).filter(Boolean).slice(0, 3);
-
-  // Ensure we always return 3 posts
-  while (posts.length < 3) posts.push(posts[0] || "Error generating post.");
-
-  return NextResponse.json({ posts });
 }
