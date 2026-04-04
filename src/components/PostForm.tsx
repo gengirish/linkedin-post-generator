@@ -2,13 +2,7 @@
 import { useState } from "react";
 
 const COURSES = [
-  "AI Strategy for Business Leaders",
-  "RAG Systems for Real Business Problems",
-  "AI Agents & Agentic Workflows",
-  "IntelliForge AI Training (Comprehensive)",
-  "BuildwithAiGiri Workshop",
-  "Prompt Engineering Masterclass",
-  "Other IntelliForge Training",
+  "Software Engineering with Gen AI",
 ];
 
 interface FormData {
